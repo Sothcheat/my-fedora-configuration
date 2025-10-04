@@ -1,0 +1,22 @@
+
+general.import = [ "~/.config/alacritty/theme/alacritty.toml" ]
+
+[env]
+TERM = "xterm-256color"
+
+[font]
+normal = { family = "MesloLGS Nerd Font Mono" }
+bold = { family = "MesloLGS Nerd Font Mono" }
+italic = { family = "MesloLGS Nerd Font Mono" }
+size = 12
+
+[window]
+padding.x = 14
+padding.y = 14
+decorations = "None"
+opacity = 0.9
+
+[keyboard]
+bindings = [
+{ key = "F11", action = "ToggleFullscreen" }
+]
