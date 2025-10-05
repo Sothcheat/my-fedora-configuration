@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # "Things To Do!" script for a fresh Fedora Workstation installation
 # Version: 25.10 - Enhanced Edition with Custom Configs
 
@@ -166,11 +166,11 @@ color_echo "green" "RPM Fusion repositories enabled."
 color_echo "yellow" "Installing multimedia codecs..."
 dnf swap ffmpeg-free ffmpeg --allowerasing -y
 dnf install -y gstreamer1-plugins-{bad-\*,good-\*,base} gstreamer1-plugin-openh264 gstreamer1-libav lame\* --exclude=gstreamer1-plugins-bad-free-devel
-dnf group install -y multimedia
+dnf group install -y multimedia 2>/dev/null || dnf groupinstall -y Multimedia 2>/dev/null || color_echo "yellow" "Multimedia group not found, but individual packages were installed"
 dnf install -y ffmpeg-libs libva libva-utils
-dnf group install -y sound-and-video
-dnf update @multimedia --setopt="install_weak_deps=False" --exclude=PackageKit-gstreamer-plugin -y
-dnf update @sound-and-video -y
+dnf group install -y sound-and-video 2>/dev/null || dnf groupinstall -y "Sound and Video" 2>/dev/null || color_echo "yellow" "Sound and Video group not found, continuing..."
+dnf update @multimedia --setopt="install_weak_deps=False" --exclude=PackageKit-gstreamer-plugin -y 2>/dev/null || true
+dnf update @sound-and-video -y 2>/dev/null || true
 color_echo "green" "Multimedia codecs installed successfully."
 
 # Install Hardware Accelerated Codecs for AMD GPUs
@@ -182,15 +182,18 @@ color_echo "green" "AMD codecs installed successfully."
 
 # Install virtualization tools to enable virtual machines and containerization
 color_echo "yellow" "Installing virtualization tools..."
-dnf install -y @virtualization
-systemctl enable --now libvirtd
-usermod -aG libvirt $ACTUAL_USER
-color_echo "green" "Virtualization tools installed successfully."
+dnf install -y @virtualization 2>/dev/null || dnf group install -y virtualization 2>/dev/null || {
+  color_echo "yellow" "Virtualization group not found, installing individual packages..."
+  dnf install -y qemu-kvm libvirt virt-install virt-manager virt-viewer
+}
+systemctl enable --now libvirtd 2>/dev/null || color_echo "yellow" "Could not enable libvirtd (may not be installed)"
+usermod -aG libvirt $ACTUAL_USER 2>/dev/null || true
+color_echo "green" "Virtualization tools installation completed."
 
 # App Installation
 # Install essential applications
 color_echo "yellow" "Installing essential applications..."
-dnf install -y p7zip p7zip-plugins fastfetch neofetch unzip unrar git wget curl gnome-tweaks htop btop
+dnf install -y p7zip p7zip-plugins fastfetch unzip unrar git wget curl gnome-tweaks htop btop
 color_echo "green" "Essential applications installed successfully."
 
 # Install Internet & Communication applications
@@ -272,15 +275,15 @@ cat > "$ZEN_PROFILE_DIR/chrome/userChrome.css" <<'USERCHROME_EOF'
   left: 50%;
   position: absolute !important;
 }
-
+ 
 #urlbar[open] #urlbar-background {
   margin: 4px !important;
 }
-
+ 
 #urlbar .urlbarView-body-inner {
   display: none !important;
 }
-
+ 
 #urlbar[usertyping] .urlbarView-body-inner {
   display: block !important;
 }
@@ -381,19 +384,19 @@ groupbox{
       opacity: 1 !important;
     }
   }
-
+  
   .App > div:nth-child(2), .wallpaper{
     display: none !important;
   }
-
+  
   .info-border > .info{
     display: none !important;
   }
-
+  
   #search-handoff-button{
     border-radius: 2em !important;
   }
-
+  
   .wordmark{
     display: none !important;
   }
@@ -670,6 +673,13 @@ color_echo "green" "Obsidian installed successfully."
 # Install Coding and DevOps applications
 color_echo "yellow" "Installing Visual Studio Code..."
 rpm --import https://packages.microsoft.com/keys/microsoft.asc
+
+# Remove old repo if exists
+if [ -f /etc/yum.repos.d/vscode.repo ]; then
+  color_echo "yellow" "VS Code repository already exists, updating..."
+  rm -f /etc/yum.repos.d/vscode.repo
+fi
+
 cat > /etc/yum.repos.d/vscode.repo <<EOF
 [code]
 name=Visual Studio Code
@@ -687,7 +697,17 @@ dnf remove -y docker docker-client docker-client-latest docker-common docker-lat
   docker-latest-logrotate docker-logrotate docker-selinux docker-engine-selinux docker-engine 2>/dev/null || true
 
 dnf -y install dnf-plugins-core
-dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
+
+# Add Docker repository (remove old one first if it exists)
+if [ -f /etc/yum.repos.d/docker-ce.repo ]; then
+  color_echo "yellow" "Docker repository already exists, removing old configuration..."
+  rm -f /etc/yum.repos.d/docker-ce.repo
+fi
+
+dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo || {
+  color_echo "yellow" "Failed to add Docker repo with dnf config-manager, trying manual method..."
+  dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+}
 
 dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 systemctl enable --now docker
@@ -704,7 +724,10 @@ chown -R $ACTUAL_USER:$ACTUAL_USER "$ACTUAL_HOME/.docker"
 color_echo "green" "Docker installed successfully. Please log out and back in for group changes to take effect."
 
 color_echo "yellow" "Installing essential development tools and languages..."
-dnf group install -y "Development Tools" "C Development Tools"
+dnf groupinstall -y "Development Tools" 2>/dev/null || dnf group install -y development-tools 2>/dev/null || {
+  color_echo "yellow" "Could not install Development Tools group, installing individual packages..."
+  dnf install -y gcc gcc-c++ make automake autoconf libtool git
+}
 dnf install -y gcc clang cmake python3 python3-pip nodejs npm
 
 # Install Java (check available version)
@@ -812,7 +835,7 @@ if [ -d "$TEMP_TELA_DIR/.git" ]; then
   }
   cd /tmp
   rm -rf "$TEMP_TELA_DIR"
-
+  
   # Set icon theme for user
   run_as_user "gsettings set org.gnome.desktop.interface icon-theme 'Tela-orange'" 2>/dev/null || {
     color_echo "yellow" "Could not set Tela icon theme as default, you can set it manually"
@@ -854,8 +877,16 @@ color_echo "green" "Hardware clock configured successfully."
 # Encrypted DNS
 color_echo "yellow" "Configuring Encrypted DNS (DNS-over-HTTPS via Cloudflare)..."
 
-# Add Cloudflared repository
-dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo 2>/dev/null || true
+# Add Cloudflared repository (remove old one first if it exists)
+if [ -f /etc/yum.repos.d/cloudflared.repo ]; then
+  color_echo "yellow" "Cloudflared repository already exists, removing old configuration..."
+  rm -f /etc/yum.repos.d/cloudflared.repo
+fi
+
+dnf config-manager addrepo --from-repofile=https://pkg.cloudflare.com/cloudflared.repo 2>/dev/null || {
+  color_echo "yellow" "Could not add Cloudflared repo, trying alternate method..."
+  dnf config-manager --add-repo https://pkg.cloudflare.com/cloudflared.repo 2>/dev/null || true
+}
 
 # Install cloudflared
 dnf install -y cloudflared
